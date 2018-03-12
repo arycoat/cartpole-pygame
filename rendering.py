@@ -41,11 +41,13 @@ class Viewer(object):
         self.width = width
         self.height = height
         self.window = Tk() # pyglet.window.Window(width=width, height=height, display=display)
+        self.canvas = Canvas(self.window)
         self.window.on_close = self.window_closed_by_user
         self.isopen = True
         self.geoms = []
         self.onetime_geoms = []
         self.transform = Transform()
+        self.canvas.pack()
 
         #glEnable(GL_BLEND)
         #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -95,6 +97,7 @@ class Viewer(object):
             arr = arr.reshape(buffer.height, buffer.width, 4)
             arr = arr[::-1,:,0:3]
         #self.window.flip()
+        self.canvas.update()
         self.onetime_geoms = []
         return arr if return_rgb_array else self.isopen
 
@@ -174,7 +177,7 @@ class Transform(Attr):
         #glTranslatef(self.translation[0], self.translation[1], 0) # translate to GL loc ppint
         #glRotatef(RAD2DEG * self.rotation, 0, 0, 1.0)
         #glScalef(self.scale[0], self.scale[1], 1)
-	def disable(self):
+    def disable(self):
         print("Transform disable")
         #glPopMatrix()
     def set_translation(self, newx, newy):
@@ -224,6 +227,7 @@ class FilledPolygon(Geom):
         self.v = v
     def render1(self):
         print("FilledPoygon render1")
+        print(self.v)
         #if   len(self.v) == 4 : glBegin(GL_QUADS)
         #elif len(self.v)  > 4 : glBegin(GL_POLYGON)
         #else: glBegin(GL_TRIANGLES)
