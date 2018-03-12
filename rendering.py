@@ -11,18 +11,10 @@ if "Apple" in sys.version:
         os.environ['DYLD_FALLBACK_LIBRARY_PATH'] += ':/usr/lib'
         # (JDS 2016/04/15): avoid bug on Anaconda 2.3.0 / Yosemite
 
-from gym.utils import reraise
-from gym import error
-
 try:
-    import pyglet
+    from tkinter import *
 except ImportError as e:
     reraise(suffix="HINT: you can install pyglet directly via 'pip install pyglet'. But if you really just want to install all Gym dependencies and not have to think about it, 'pip install -e .[all]' or 'pip install gym[all]' will do it.")
-
-try:
-    from pyglet.gl import *
-except ImportError as e:
-    reraise(prefix="Error occured while running `from pyglet.gl import *`",suffix="HINT: make sure you have OpenGL install. On Ubuntu, you can run 'apt-get install python-opengl'. If you're running on a server, you may need a virtual frame buffer; something like this should work: 'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'")
 
 import math
 import numpy as np
@@ -48,15 +40,15 @@ class Viewer(object):
 
         self.width = width
         self.height = height
-        self.window = pyglet.window.Window(width=width, height=height, display=display)
+        self.window = Tk() # pyglet.window.Window(width=width, height=height, display=display)
         self.window.on_close = self.window_closed_by_user
         self.isopen = True
         self.geoms = []
         self.onetime_geoms = []
         self.transform = Transform()
 
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        #glEnable(GL_BLEND)
+        #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     def close(self):
         self.window.close()
@@ -79,11 +71,11 @@ class Viewer(object):
         self.onetime_geoms.append(geom)
 
     def render(self, return_rgb_array=False):
-        glClearColor(1,1,1,1)
-        self.window.clear()
-        self.window.switch_to()
-        self.window.dispatch_events()
-        self.transform.enable()
+        #glClearColor(1,1,1,1)
+        #self.window.clear()
+        #self.window.switch_to()
+        #self.window.dispatch_events()
+        #self.transform.enable()
         for geom in self.geoms:
             geom.render()
         for geom in self.onetime_geoms:
@@ -102,7 +94,7 @@ class Viewer(object):
             # than the requested one.
             arr = arr.reshape(buffer.height, buffer.width, 4)
             arr = arr[::-1,:,0:3]
-        self.window.flip()
+        #self.window.flip()
         self.onetime_geoms = []
         return arr if return_rgb_array else self.isopen
 
@@ -177,12 +169,14 @@ class Transform(Attr):
         self.set_rotation(rotation)
         self.set_scale(*scale)
     def enable(self):
-        glPushMatrix()
-        glTranslatef(self.translation[0], self.translation[1], 0) # translate to GL loc ppint
-        glRotatef(RAD2DEG * self.rotation, 0, 0, 1.0)
-        glScalef(self.scale[0], self.scale[1], 1)
-    def disable(self):
-        glPopMatrix()
+        print("Transform enable")
+        #glPushMatrix()
+        #glTranslatef(self.translation[0], self.translation[1], 0) # translate to GL loc ppint
+        #glRotatef(RAD2DEG * self.rotation, 0, 0, 1.0)
+        #glScalef(self.scale[0], self.scale[1], 1)
+	def disable(self):
+        print("Transform disable")
+        #glPopMatrix()
     def set_translation(self, newx, newy):
         self.translation = (float(newx), float(newy))
     def set_rotation(self, new):
@@ -194,42 +188,48 @@ class Color(Attr):
     def __init__(self, vec4):
         self.vec4 = vec4
     def enable(self):
-        glColor4f(*self.vec4)
+        print("Color enable")
+        #glColor4f(*self.vec4)
 
 class LineStyle(Attr):
     def __init__(self, style):
         self.style = style
     def enable(self):
-        glEnable(GL_LINE_STIPPLE)
-        glLineStipple(1, self.style)
+        print("LineStyle enable")
+        #glEnable(GL_LINE_STIPPLE)
+        #glLineStipple(1, self.style)
     def disable(self):
-        glDisable(GL_LINE_STIPPLE)
+        print("LineStyle disable")
+        #glDisable(GL_LINE_STIPPLE)
 
 class LineWidth(Attr):
     def __init__(self, stroke):
         self.stroke = stroke
     def enable(self):
-        glLineWidth(self.stroke)
+        print("LineWith enable")
+        #glLineWidth(self.stroke)
 
 class Point(Geom):
     def __init__(self):
         Geom.__init__(self)
     def render1(self):
-        glBegin(GL_POINTS) # draw point
-        glVertex3f(0.0, 0.0, 0.0)
-        glEnd()
+        print("Point render1")
+        #glBegin(GL_POINTS) # draw point
+        #glVertex3f(0.0, 0.0, 0.0)
+        #glEnd()
 
 class FilledPolygon(Geom):
     def __init__(self, v):
         Geom.__init__(self)
         self.v = v
     def render1(self):
-        if   len(self.v) == 4 : glBegin(GL_QUADS)
-        elif len(self.v)  > 4 : glBegin(GL_POLYGON)
-        else: glBegin(GL_TRIANGLES)
-        for p in self.v:
-            glVertex3f(p[0], p[1],0)  # draw each vertex
-        glEnd()
+        print("FilledPoygon render1")
+        #if   len(self.v) == 4 : glBegin(GL_QUADS)
+        #elif len(self.v)  > 4 : glBegin(GL_POLYGON)
+        #else: glBegin(GL_TRIANGLES)
+        #for p in self.v:
+        #    glVertex3f(p[0], p[1],0)  # draw each vertex
+        #glEnd()
 
 def make_circle(radius=10, res=30, filled=True):
     points = []
@@ -275,10 +275,11 @@ class PolyLine(Geom):
         self.linewidth = LineWidth(1)
         self.add_attr(self.linewidth)
     def render1(self):
-        glBegin(GL_LINE_LOOP if self.close else GL_LINE_STRIP)
-        for p in self.v:
-            glVertex3f(p[0], p[1],0)  # draw each vertex
-        glEnd()
+        print("PolyLine render1")
+        #glBegin(GL_LINE_LOOP if self.close else GL_LINE_STRIP)
+        #for p in self.v:
+        #    glVertex3f(p[0], p[1],0)  # draw each vertex
+        #glEnd()
     def set_linewidth(self, x):
         self.linewidth.stroke = x
 
@@ -291,10 +292,11 @@ class Line(Geom):
         self.add_attr(self.linewidth)
 
     def render1(self):
-        glBegin(GL_LINES)
-        glVertex2f(*self.start)
-        glVertex2f(*self.end)
-        glEnd()
+        print("Line render1")
+        #glBegin(GL_LINES)
+        #glVertex2f(*self.start)
+        #glVertex2f(*self.end)
+        #glEnd()
 
 class Image(Geom):
     def __init__(self, fname, width, height):
@@ -337,7 +339,7 @@ class SimpleImageViewer(object):
         self.window.switch_to()
         self.window.dispatch_events()
         image.blit(0, 0, width=self.window.width, height=self.window.height)
-        self.window.flip()
+        #self.window.flip()
     def close(self):
         if self.isopen:
             self.window.close()
