@@ -21,40 +21,24 @@ import numpy as np
 
 RAD2DEG = 57.29577951308232
 
-def get_display(spec):
-    """Convert a display specification (such as :0) into an actual Display
-    object.
-
-    Pyglet only supports multiple Displays on Linux.
-    """
-    if spec is None:
-        return None
-    elif isinstance(spec, six.string_types):
-        return pyglet.canvas.Display(spec)
-    else:
-        raise error.Error('Invalid display specification: {}. (Must be a string like :0 or None.)'.format(spec))
-
 class Viewer(object):
     def __init__(self, width, height, display=None):
-        display = get_display(display)
-
         self.width = width
         self.height = height
         self.window = Tk() # pyglet.window.Window(width=width, height=height, display=display)
-        self.canvas = Canvas(self.window)
+        self.canvas = Canvas(self.window, width=width, height=height)
         self.window.on_close = self.window_closed_by_user
         self.isopen = True
         self.geoms = []
         self.onetime_geoms = []
         self.transform = Transform()
-        self.canvas.pack()
 
         #glEnable(GL_BLEND)
         #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     def close(self):
-        self.window.close()
-
+        self.canvas.mainloop()
+        
     def window_closed_by_user(self):
         self.isopen = False
 
@@ -98,6 +82,8 @@ class Viewer(object):
             arr = arr[::-1,:,0:3]
         #self.window.flip()
         self.canvas.update()
+        self.canvas.after(80)
+        #self.canvas.delete(ALL)
         self.onetime_geoms = []
         return arr if return_rgb_array else self.isopen
 
@@ -222,26 +208,21 @@ class Point(Geom):
         #glEnd()
 
 class FilledPolygon(Geom):
-    def __init__(self, v):
+    def __init__(self, canvas, v):
         Geom.__init__(self)
         self.v = v
+        self.canvas = canvas
+        
     def render1(self):
-        print("FilledPoygon render1")
-        print(self.v)
-        #if   len(self.v) == 4 : glBegin(GL_QUADS)
-        #elif len(self.v)  > 4 : glBegin(GL_POLYGON)
-        #else: glBegin(GL_TRIANGLES)
-        #for p in self.v:
-        #    glVertex3f(p[0], p[1],0)  # draw each vertex
-        #glEnd()
+        self.poly = self.canvas.create_polygon(self.v)
 
-def make_circle(radius=10, res=30, filled=True):
+def make_circle(canvas, radius=10, res=30, filled=True):
     points = []
     for i in range(res):
         ang = 2*math.pi*i / res
         points.append((math.cos(ang)*radius, math.sin(ang)*radius))
     if filled:
-        return FilledPolygon(points)
+        return FilledPolygon(canvas, points)
     else:
         return PolyLine(points, True)
 
@@ -254,7 +235,7 @@ def make_polyline(v):
 
 def make_capsule(length, width):
     l, r, t, b = 0, length, width/2, -width/2
-    box = make_polygon([(l,b), (l,t), (r,t), (r,b)])
+    box = make_polygon([l,b, l,t, r,t, r,b])
     circ0 = make_circle(width/2)
     circ1 = make_circle(width/2)
     circ1.add_attr(Transform(translation=(length, 0)))
@@ -288,19 +269,16 @@ class PolyLine(Geom):
         self.linewidth.stroke = x
 
 class Line(Geom):
-    def __init__(self, start=(0.0, 0.0), end=(0.0, 0.0)):
+    def __init__(self, canvas, start=(0.0, 0.0), end=(0.0, 0.0)):
         Geom.__init__(self)
         self.start = start
         self.end = end
         self.linewidth = LineWidth(1)
         self.add_attr(self.linewidth)
+        self.canvas = canvas
 
     def render1(self):
-        print("Line render1")
-        #glBegin(GL_LINES)
-        #glVertex2f(*self.start)
-        #glVertex2f(*self.end)
-        #glEnd()
+        self.canvas.create_line(self.start[0], self.start[1], self.end[0], self.end[1], fill="red")
 
 class Image(Geom):
     def __init__(self, fname, width, height):
