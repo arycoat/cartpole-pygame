@@ -4,12 +4,14 @@ Copied from http://incompleteideas.net/sutton/book/code/pole.c
 permalink: https://perma.cc/C9ZM-652R
 """
 
+import logging
 import math
 import gym
-from gym import spaces, logger
+from gym import spaces
 from gym.utils import seeding
 import numpy as np
-import rendering
+
+logger = logging.getLogger(__name__)
 
 class CartPoleEnv(gym.Env):
     metadata = {
@@ -41,17 +43,17 @@ class CartPoleEnv(gym.Env):
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(-high, high)
 
-        self.seed()
+        self._seed()
         self.viewer = None
         self.state = None
 
         self.steps_beyond_done = None
 
-    def seed(self, seed=None):
+    def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def step(self, action):
+    def _step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
@@ -80,18 +82,24 @@ class CartPoleEnv(gym.Env):
             reward = 1.0
         else:
             if self.steps_beyond_done == 0:
-                logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
+                logger.warning("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
             self.steps_beyond_done += 1
             reward = 0.0
 
         return np.array(self.state), reward, done, {}
 
-    def reset(self):
+    def _reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
         return np.array(self.state)
 
-    def render(self, mode='human'):
+    def _render(self, mode='human', close=False):
+        if close:
+            if self.viewer is not None:
+                self.viewer.close()
+                self.viewer = None
+            return
+
         screen_width = 600
         screen_height = 400
 
@@ -104,45 +112,35 @@ class CartPoleEnv(gym.Env):
         cartheight = 30.0
 
         if self.viewer is None:
+            import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
-            
             l,r,t,b = -cartwidth/2, cartwidth/2, cartheight/2, -cartheight/2
-            axleoffset = cartheight/4.0
-            cart = rendering.FilledPolygon(self.viewer.canvas, [l,b, l,t, r,t, r,b])
+            axleoffset =cartheight/4.0
+            cart = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
             self.carttrans = rendering.Transform()
             cart.add_attr(self.carttrans)
             self.viewer.add_geom(cart)
-            
             l,r,t,b = -polewidth/2,polewidth/2,polelen-polewidth/2,-polewidth/2
-            pole = rendering.FilledPolygon(self.viewer.canvas, [l,b, l,t, r,t, r,b])
+            pole = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
             pole.set_color(.8,.6,.4)
             self.poletrans = rendering.Transform(translation=(0, axleoffset))
             pole.add_attr(self.poletrans)
             pole.add_attr(self.carttrans)
             self.viewer.add_geom(pole)
-
-            '''
             self.axle = rendering.make_circle(polewidth/2)
             self.axle.add_attr(self.poletrans)
             self.axle.add_attr(self.carttrans)
             self.axle.set_color(.5,.5,.8)
             self.viewer.add_geom(self.axle)
-            '''
-            
-            self.track = rendering.Line(self.viewer.canvas, (0,carty), (screen_width,carty))
+            self.track = rendering.Line((0,carty), (screen_width,carty))
             self.track.set_color(0,0,0)
             self.viewer.add_geom(self.track)
-            
-            self.viewer.canvas.pack()
 
         if self.state is None: return None
 
         x = self.state
         cartx = x[0]*scale+screen_width/2.0 # MIDDLE OF CART
         self.carttrans.set_translation(cartx, carty)
-        #self.poletrans.set_rotation(-x[2])
+        self.poletrans.set_rotation(-x[2])
 
         return self.viewer.render(return_rgb_array = mode=='rgb_array')
-
-    def close(self):
-        if self.viewer: self.viewer.close()

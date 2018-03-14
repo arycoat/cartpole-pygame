@@ -11,36 +11,79 @@ if "Apple" in sys.version:
         os.environ['DYLD_FALLBACK_LIBRARY_PATH'] += ':/usr/lib'
         # (JDS 2016/04/15): avoid bug on Anaconda 2.3.0 / Yosemite
 
+from gym.utils import reraise
+from gym import error
+
 try:
-    from tkinter import *
+    import pygame
+    from pygame.locals import *
 except ImportError as e:
     reraise(suffix="HINT: you can install pyglet directly via 'pip install pyglet'. But if you really just want to install all Gym dependencies and not have to think about it, 'pip install -e .[all]' or 'pip install gym[all]' will do it.")
+
+try:
+    from OpenGL.GL import *
+    from OpenGL.GLU import *
+except ImportError as e:
+    reraise(prefix="Error occured while running `from pyglet.gl import *`",suffix="HINT: make sure you have OpenGL install. On Ubuntu, you can run 'apt-get install python-opengl'. If you're running on a server, you may need a virtual frame buffer; something like this should work: 'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'")
 
 import math
 import numpy as np
 
 RAD2DEG = 57.29577951308232
 
+def get_display(spec):
+    """Convert a display specification (such as :0) into an actual Display
+    object.
+
+    Pyglet only supports multiple Displays on Linux.
+    """
+    if spec is None:
+        return None
+    elif isinstance(spec, six.string_types):
+        return pyglet.canvas.Display(spec)
+    else:
+        raise error.Error('Invalid display specification: {}. (Must be a string like :0 or None.)'.format(spec))
+
 class Viewer(object):
     def __init__(self, width, height, display=None):
         self.width = width
         self.height = height
-        self.window = Tk() # pyglet.window.Window(width=width, height=height, display=display)
-        self.canvas = Canvas(self.window, width=width, height=height)
-        self.window.on_close = self.window_closed_by_user
-        self.isopen = True
+
+        pygame.init()
+        pygame.display.set_mode((width, height), OPENGL|DOUBLEBUF)
+        
+        #self.window.on_close = self.window_closed_by_user
         self.geoms = []
         self.onetime_geoms = []
         self.transform = Transform()
+        
+        glViewport(0, 0, width, height)
 
-        #glEnable(GL_BLEND)
-        #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glPushAttrib(GL_ENABLE_BIT)
+        glDisable(GL_DEPTH_TEST)
+        glDisable(GL_CULL_FACE)
+
+        glDepthFunc(GL_ALWAYS)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0.0,  width, height, 0.0, 0.0, 1.0)
+
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+
+        glColor4f(1,1,1,1)
+        glClearColor(0.0, 0.0, 0.0, 1.0)
+        glClearDepth(1.0)
 
     def close(self):
-        self.canvas.mainloop()
-        
+        pygame.display.quit()
+
     def window_closed_by_user(self):
-        self.isopen = False
+        self.close()
 
     def set_bounds(self, left, right, bottom, top):
         assert right > left and top > bottom
@@ -57,11 +100,15 @@ class Viewer(object):
         self.onetime_geoms.append(geom)
 
     def render(self, return_rgb_array=False):
-        #glClearColor(1,1,1,1)
-        #self.window.clear()
-        #self.window.switch_to()
-        #self.window.dispatch_events()
-        #self.transform.enable()
+        glClearColor(1,1,1,1)
+        
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                self.close()
+                    
+        glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT )
+
+        self.transform.enable()
         for geom in self.geoms:
             geom.render()
         for geom in self.onetime_geoms:
@@ -80,12 +127,10 @@ class Viewer(object):
             # than the requested one.
             arr = arr.reshape(buffer.height, buffer.width, 4)
             arr = arr[::-1,:,0:3]
-        #self.window.flip()
-        self.canvas.update()
-        self.canvas.after(80)
-        #self.canvas.delete(ALL)
+        glFlush()
+        pygame.display.flip()
         self.onetime_geoms = []
-        return arr if return_rgb_array else self.isopen
+        return arr
 
     # Convenience
     def draw_circle(self, radius=10, res=30, filled=True, **attrs):
@@ -119,9 +164,6 @@ class Viewer(object):
         arr = np.fromstring(image_data.data, dtype=np.uint8, sep='')
         arr = arr.reshape(self.height, self.width, 4)
         return arr[::-1,:,0:3]
-
-    def __del__(self):
-        self.close()
 
 def _add_attrs(geom, attrs):
     if "color" in attrs:
@@ -158,14 +200,12 @@ class Transform(Attr):
         self.set_rotation(rotation)
         self.set_scale(*scale)
     def enable(self):
-        print("Transform enable")
-        #glPushMatrix()
-        #glTranslatef(self.translation[0], self.translation[1], 0) # translate to GL loc ppint
-        #glRotatef(RAD2DEG * self.rotation, 0, 0, 1.0)
-        #glScalef(self.scale[0], self.scale[1], 1)
+        glPushMatrix()
+        glTranslatef(self.translation[0], self.translation[1], 0) # translate to GL loc ppint
+        glRotatef(RAD2DEG * self.rotation, 0, 0, 1.0)
+        glScalef(self.scale[0], self.scale[1], 1)
     def disable(self):
-        print("Transform disable")
-        #glPopMatrix()
+        glPopMatrix()
     def set_translation(self, newx, newy):
         self.translation = (float(newx), float(newy))
     def set_rotation(self, new):
@@ -177,52 +217,50 @@ class Color(Attr):
     def __init__(self, vec4):
         self.vec4 = vec4
     def enable(self):
-        print("Color enable")
-        #glColor4f(*self.vec4)
+        glColor4f(*self.vec4)
 
 class LineStyle(Attr):
     def __init__(self, style):
         self.style = style
     def enable(self):
-        print("LineStyle enable")
-        #glEnable(GL_LINE_STIPPLE)
-        #glLineStipple(1, self.style)
+        glEnable(GL_LINE_STIPPLE)
+        glLineStipple(1, self.style)
     def disable(self):
-        print("LineStyle disable")
-        #glDisable(GL_LINE_STIPPLE)
+        glDisable(GL_LINE_STIPPLE)
 
 class LineWidth(Attr):
     def __init__(self, stroke):
         self.stroke = stroke
     def enable(self):
-        print("LineWith enable")
-        #glLineWidth(self.stroke)
+        glLineWidth(self.stroke)
 
 class Point(Geom):
     def __init__(self):
         Geom.__init__(self)
     def render1(self):
-        print("Point render1")
-        #glBegin(GL_POINTS) # draw point
-        #glVertex3f(0.0, 0.0, 0.0)
-        #glEnd()
+        glBegin(GL_POINTS) # draw point
+        glVertex3f(0.0, 0.0, 0.0)
+        glEnd()
 
 class FilledPolygon(Geom):
-    def __init__(self, canvas, v):
+    def __init__(self, v):
         Geom.__init__(self)
         self.v = v
-        self.canvas = canvas
-        
     def render1(self):
-        self.poly = self.canvas.create_polygon(self.v)
+        if   len(self.v) == 4 : glBegin(GL_QUADS)
+        elif len(self.v)  > 4 : glBegin(GL_POLYGON)
+        else: glBegin(GL_TRIANGLES)
+        for p in self.v:
+            glVertex3f(p[0], p[1],0)  # draw each vertex
+        glEnd()
 
-def make_circle(canvas, radius=10, res=30, filled=True):
+def make_circle(radius=10, res=30, filled=True):
     points = []
     for i in range(res):
         ang = 2*math.pi*i / res
         points.append((math.cos(ang)*radius, math.sin(ang)*radius))
     if filled:
-        return FilledPolygon(canvas, points)
+        return FilledPolygon(points)
     else:
         return PolyLine(points, True)
 
@@ -235,7 +273,7 @@ def make_polyline(v):
 
 def make_capsule(length, width):
     l, r, t, b = 0, length, width/2, -width/2
-    box = make_polygon([l,b, l,t, r,t, r,b])
+    box = make_polygon([(l,b), (l,t), (r,t), (r,b)])
     circ0 = make_circle(width/2)
     circ1 = make_circle(width/2)
     circ1.add_attr(Transform(translation=(length, 0)))
@@ -260,25 +298,26 @@ class PolyLine(Geom):
         self.linewidth = LineWidth(1)
         self.add_attr(self.linewidth)
     def render1(self):
-        print("PolyLine render1")
-        #glBegin(GL_LINE_LOOP if self.close else GL_LINE_STRIP)
-        #for p in self.v:
-        #    glVertex3f(p[0], p[1],0)  # draw each vertex
-        #glEnd()
+        glBegin(GL_LINE_LOOP if self.close else GL_LINE_STRIP)
+        for p in self.v:
+            glVertex3f(p[0], p[1],0)  # draw each vertex
+        glEnd()
     def set_linewidth(self, x):
         self.linewidth.stroke = x
 
 class Line(Geom):
-    def __init__(self, canvas, start=(0.0, 0.0), end=(0.0, 0.0)):
+    def __init__(self, start=(0.0, 0.0), end=(0.0, 0.0)):
         Geom.__init__(self)
         self.start = start
         self.end = end
         self.linewidth = LineWidth(1)
         self.add_attr(self.linewidth)
-        self.canvas = canvas
 
     def render1(self):
-        self.canvas.create_line(self.start[0], self.start[1], self.end[0], self.end[1], fill="red")
+        glBegin(GL_LINES)
+        glVertex2f(*self.start)
+        glVertex2f(*self.end)
+        glEnd()
 
 class Image(Geom):
     def __init__(self, fname, width, height):
@@ -300,32 +339,21 @@ class SimpleImageViewer(object):
         self.display = display
     def imshow(self, arr):
         if self.window is None:
-            height, width, _channels = arr.shape
-            self.window = pyglet.window.Window(width=4*width, height=4*height, display=self.display, vsync=False, resizable=True)
+            height, width, channels = arr.shape
+            self.window = pyglet.window.Window(width=width, height=height, display=self.display)
             self.width = width
             self.height = height
             self.isopen = True
-
-            @self.window.event
-            def on_resize(width, height):
-                self.width = width
-                self.height = height
-
-            @self.window.event
-            def on_close():
-                self.isopen = False
-
-        assert len(arr.shape) == 3, "You passed in an image with the wrong number shape"
-        image = pyglet.image.ImageData(arr.shape[1], arr.shape[0], 'RGB', arr.tobytes(), pitch=arr.shape[1]*-3)
+        assert arr.shape == (self.height, self.width, 3), "You passed in an image with the wrong number shape"
+        image = pyglet.image.ImageData(self.width, self.height, 'RGB', arr.tobytes(), pitch=self.width * -3)
         self.window.clear()
         self.window.switch_to()
         self.window.dispatch_events()
-        image.blit(0, 0, width=self.window.width, height=self.window.height)
-        #self.window.flip()
+        image.blit(0,0)
+        self.window.flip()
     def close(self):
         if self.isopen:
             self.window.close()
             self.isopen = False
-
     def __del__(self):
         self.close()
