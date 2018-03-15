@@ -68,16 +68,12 @@ class Viewer(object):
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
         glMatrixMode(GL_PROJECTION)
-        glPushMatrix()
         glLoadIdentity()
-        glOrtho(0.0,  width, height, 0.0, 0.0, 1.0)
-
+        glOrtho(0.0,  width, 0.0, height, 0.0, 1.0)
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
-
-        glColor4f(1,1,1,1)
-        glClearColor(0.0, 0.0, 0.0, 1.0)
-        glClearDepth(1.0)
+        glLoadIdentity ();
+        glClear (GL_COLOR_BUFFER_BIT);
 
     def close(self):
         pygame.display.quit()
